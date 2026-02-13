@@ -101,3 +101,13 @@ def softmax(x: torch.Tensor, dim: int):
     sum_exp = torch.sum(exp, dim=dim, keepdim=True) # [B, S, 1]
     return exp / sum_exp
 
+
+def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: torch.Tensor, device: torch.device = None, dtype: torch.dtype = None):
+    d_k = key.shape[-1]
+    logits = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
+    if mask is not None:
+        logits = logits.masked_fill(~mask, float('-inf'))
+    attention_score = softmax(logits, dim=-1)
+    output = attention_score @ value
+    return output
+
