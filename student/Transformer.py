@@ -49,9 +49,9 @@ class SwiGLU(nn.Module):
         self.d_model = d_model
         self.d_ff = d_ff
 
-        self.gate_proj = Linear(in_features=self.d_model, out_features=self.d_ff)
-        self.up_proj = Linear(in_features=self.d_model, out_features=self.d_ff)
-        self.down_proj = Linear(in_features=self.d_ff, out_features=self.d_model)
+        self.gate_proj = Linear(in_features=self.d_model, out_features=self.d_ff, device=device, dtype=dtype)
+        self.up_proj = Linear(in_features=self.d_model, out_features=self.d_ff, device=device, dtype=dtype)
+        self.down_proj = Linear(in_features=self.d_ff, out_features=self.d_model, device=device, dtype=dtype)
 
     def SiLU(self, x: torch.Tensor):
         return x * torch.sigmoid(x)
@@ -108,12 +108,44 @@ def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: 
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int,device: torch.device = None, dtype: torch.dtype = None):
+    def __init__(self, d_model: int, num_heads: int, rope: bool = False, theta: float = None, max_seq_len: int = None, device: torch.device = None, dtype: torch.dtype = None):
         super().__init__()
         self.d_model = d_model
         self.d_k = d_model // num_heads
         self.d_v = self.d_k
         self.num_heads = num_heads
 
+        self.q_proj = Linear(in_features=self.d_model, out_features=self.d_k * self.num_heads, device=device, dtype=dtype)
+        self.k_proj = Linear(in_features=self.d_model, out_features=self.d_k * self.num_heads, device=device, dtype=dtype)
+        self.v_proj = Linear(in_features=self.d_model, out_features=self.d_v * self.num_heads, device=device, dtype=dtype)
+        self.o_proj = Linear(in_features=self.d_v * self.num_heads, out_features=self.d_model, device=device, dtype=dtype)
+
+        self.rope = rope
+        if self.rope:
+            assert theta is not None
+            assert max_seq_len is not None
+            self.rope_emb = RotaryPositionalEmbedding(theta=theta, d_k=self.d_k, max_seq_len=max_seq_len, device=device)
+        else:
+            self.rope_emb = None
+
     def forward(self, x: torch.Tensor):
-        pass
+        input_shape = x.shape[:-1] # [B, S]
+        hidden_shape = (*input_shape, self.num_heads, -1) # [B, S, H, d_h]
+
+        query = self.q_proj(x).view(hidden_shape).transpose(1, 2) # [B, S, d_m] -> [B, S, H, d_h] -> [B, H, S, d_h]
+        key = self.k_proj(x).view(hidden_shape).transpose(1, 2)
+        value = self.v_proj(x).view(hidden_shape).transpose(1, 2)
+
+        if self.rope:
+            position = torch.arange(input_shape[-1], device=x.device).unsqueeze(0).expand(input_shape)
+            query = self.rope_emb(query, position)
+            key = self.rope_emb(key, position)
+
+        mask = torch.triu(torch.ones(input_shape[-1], input_shape[-1], device=x.device, dtype=torch.bool), diagonal=1) # [S, S]
+        mask = mask.unsqueeze(0).unsqueeze(0) # [1, 1, S, S]
+        mask = ~mask
+
+        attn_output = scaled_dot_product_attention(query, key, value, mask, x.device, x.dtype).transpose(1, 2) # [B, H, S, d_h] -> [B, S, H, d_h]
+        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = self.o_proj(attn_output)
+        return attn_output
