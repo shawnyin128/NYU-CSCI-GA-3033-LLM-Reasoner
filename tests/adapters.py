@@ -12,7 +12,7 @@ from torch import Tensor
 from student.byte_pair_encoding import train_bpe, Tokenizer
 from student.Transformer import (Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, softmax,
                                  scaled_dot_product_attention, MultiHeadAttention, TransformerBlock, TransformerLM)
-from student.train import cross_entropy, AdamW, cosine_annealing_scheduler, gradient_clipping
+from student.optimize import cross_entropy, AdamW, cosine_annealing_scheduler, gradient_clipping
 
 
 def run_linear(
