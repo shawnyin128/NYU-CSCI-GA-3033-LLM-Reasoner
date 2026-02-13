@@ -183,3 +183,32 @@ class TransformerBlock(nn.Module):
         x = residual + x
         return x
 
+
+class TransformerLM(nn.Module):
+    def __init__(self, vocab_size: int, context_length: int, num_layers: int, d_model: int, num_heads: int,
+                 d_ff: int, rope: bool = False, theta: float = None, eps: float = 1e-5,
+                 device: torch.device = None, dtype: torch.dtype = None):
+        super().__init__()
+        self.emb = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, device=device, dtype=dtype)
+        self.layers = nn.ModuleList(
+            [TransformerBlock(d_model=d_model,
+                              num_heads=num_heads,
+                              d_ff=d_ff,
+                              rope=rope,
+                              theta=theta,
+                              eps=eps,
+                              max_seq_len=context_length,
+                              device=device,
+                              dtype=dtype)
+            for _ in range(num_layers)]
+        )
+        self.norm = RMSNorm(d_model=d_model, eps=eps, device=device, dtype=dtype)
+        self.lm_head = Linear(in_features=d_model, out_features=vocab_size, device=device, dtype=dtype)
+
+    def forward(self, token_ids: torch.Tensor):
+        embed = self.emb(token_ids)
+        for layer in self.layers:
+            embed = layer(embed)
+        embed = self.norm(embed)
+        logits = self.lm_head(embed)
+        return logits
