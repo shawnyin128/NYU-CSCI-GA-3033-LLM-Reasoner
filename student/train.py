@@ -2,6 +2,7 @@ import argparse
 import torch
 import torch.nn as nn
 import numpy as np
+import wandb
 
 from tqdm import tqdm
 
@@ -74,7 +75,15 @@ def train_pipeline():
     # optimizer
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--max_l2_norm", type=float, default=1.0)
+    # save
+    parser.add_argument("--out_path", type=str, default="student/checkpoint/model/model.pt")
     args = parser.parse_args()
+
+    # wandb init
+    wandb.init(
+        project="LLM-A1-test",
+        config=vars(args)
+    )
 
     # determine device
     if torch.cuda.is_available():
@@ -128,8 +137,6 @@ def train_pipeline():
 
             # loss compute
             loss = cross_entropy(logits, targets)
-            if global_step % 10 == 0:
-                tqdm.write(f"[INFO] loss: {loss.item():4f}")
 
             # gradient zeroing
             optimizer.zero_grad()
@@ -155,6 +162,17 @@ def train_pipeline():
             )
             for param_group in optimizer.param_groups:
                 param_group["lr"] = lr
+
+            # logging
+            if global_step % 10 == 0:
+                wandb.log({
+                    "loss": loss.item(),
+                    "lr": optimizer.param_groups[0]["lr"],
+                    "step": global_step,
+                })
+
+            # save model
+            save_checkpoint(model, optimizer, global_step, args.out_path)
     return model
 
 
