@@ -101,6 +101,18 @@ def cosine_annealing_scheduler(iter: int, lr_max: float, lr_min: float, warm_up_
         return lr_min + 0.5 * (1 + math.cos(math.pi * (iter - warm_up_steps) / (cosine_annealing_steps - warm_up_steps))) * (lr_max - lr_min)
 
 
+def gradient_clipping(params, max_l2_norm: float, eps: float = 1e-6):
+    grads = [p.grad for p in params if p.grad is not None]
+    total_norm_sq = 0.0
+    for g in grads:
+        total_norm_sq += g.data.pow(2).sum()
+    total_norm = torch.sqrt(total_norm_sq)
+    if total_norm > max_l2_norm:
+        scale = max_l2_norm / (total_norm + eps)
+        for g in grads:
+            g.data.mul_(scale)
+
+
 if __name__ == "__main__":
     weights = torch.nn.Parameter(5 * torch.randn((10, 10), device="cuda"))
     opt = SGD([weights], lr=1e3)

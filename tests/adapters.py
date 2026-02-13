@@ -12,7 +12,7 @@ from torch import Tensor
 from student.byte_pair_encoding import train_bpe, Tokenizer
 from student.Transformer import (Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, softmax,
                                  scaled_dot_product_attention, MultiHeadAttention, TransformerBlock, TransformerLM)
-from student.train import cross_entropy, AdamW, cosine_annealing_scheduler
+from student.train import cross_entropy, AdamW, cosine_annealing_scheduler, gradient_clipping
 
 
 def run_linear(
@@ -528,7 +528,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    return gradient_clipping(parameters,max_l2_norm)
 
 
 def get_adamw_cls() -> Any:
