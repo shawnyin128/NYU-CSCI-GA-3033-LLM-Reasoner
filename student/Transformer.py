@@ -49,23 +49,18 @@ class SwiGLU(nn.Module):
         self.d_model = d_model
         self.d_ff = d_ff
 
-        std = math.sqrt(2.0 / (self.d_model + self.d_ff))
-        self.weight1 = nn.Parameter(torch.zeros(self.d_ff, self.d_model, device=device, dtype=dtype))
-        self.weight2 = nn.Parameter(torch.zeros(self.d_model, self.d_ff, device=device, dtype=dtype))
-        self.weight3 = nn.Parameter(torch.zeros(self.d_ff, self.d_model, device=device, dtype=dtype))
-
-        torch.nn.init.trunc_normal_(self.weight1, mean=0.0, std=std, a=-3*std, b=3*std)
-        torch.nn.init.trunc_normal_(self.weight2, mean=0.0, std=std, a=-3*std, b=3*std)
-        torch.nn.init.trunc_normal_(self.weight3, mean=0.0, std=std, a=-3*std, b=3*std)
+        self.gate_proj = Linear(in_features=self.d_model, out_features=self.d_ff)
+        self.up_proj = Linear(in_features=self.d_model, out_features=self.d_ff)
+        self.down_proj = Linear(in_features=self.d_ff, out_features=self.d_model)
 
     def SiLU(self, x: torch.Tensor):
         return x * torch.sigmoid(x)
 
     def forward(self, x: torch.Tensor):
-        gate = self.SiLU(x @ self.weight1.t())
-        up = gate * (x @ self.weight3.t())
-        down = up @ self.weight2.t()
-        return down
+        gate_out = self.SiLU(self.gate_proj(x))
+        up_out = gate_out * self.up_proj(x)
+        down_out = self.down_proj(up_out)
+        return down_out
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -111,3 +106,14 @@ def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: 
     output = attention_score @ value
     return output
 
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model: int, num_heads: int,device: torch.device = None, dtype: torch.dtype = None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_k = d_model // num_heads
+        self.d_v = self.d_k
+        self.num_heads = num_heads
+
+    def forward(self, x: torch.Tensor):
+        pass

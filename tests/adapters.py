@@ -92,9 +92,9 @@ def run_swiglu(
     # swiglu.w3.weight.data = w3_weight
     ffn = SwiGLU(d_model=d_model, d_ff=d_ff)
     with torch.no_grad():
-        ffn.weight1.copy_(w1_weight)
-        ffn.weight2.copy_(w2_weight)
-        ffn.weight3.copy_(w3_weight)
+        ffn.gate_proj.weight.copy_(w1_weight)
+        ffn.down_proj.weight.copy_(w2_weight)
+        ffn.up_proj.weight.copy_(w3_weight)
     return ffn(in_features)
 
 
