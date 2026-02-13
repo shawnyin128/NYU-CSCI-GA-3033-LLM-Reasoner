@@ -1,6 +1,9 @@
+import argparse
 import torch
 import torch.nn as nn
 import numpy as np
+
+from tqdm import tqdm
 
 from student.Transformer import TransformerLM
 from student.optimize import AdamW, cosine_annealing_scheduler, gradient_clipping, cross_entropy
@@ -17,8 +20,8 @@ def data_load(dataset: np.ndarray, batch_size: int, context_length: int, device:
     inputs_np = dataset[indices]
     targets_np = dataset[indices + 1]
 
-    inputs = torch.from_numpy(inputs_np).to(device)
-    targets = torch.from_numpy(targets_np).to(device)
+    inputs = torch.from_numpy(inputs_np).long().to(device)
+    targets = torch.from_numpy(targets_np).long().to(device)
     return inputs, targets
 
 
@@ -42,6 +45,35 @@ def load_checkpoint(src: str, model: nn.Module, optimizer: torch.optim.Optimizer
 def train_pipeline():
     # argparse
     parser = argparse.ArgumentParser()
+    # dataset config
+    parser.add_argument("--dataset_path", type=str, default="student/checkpoint/BPE/ids_train.npy")
+    parser.add_argument("--vocab_size", type=int, default=10000)
+    # model config
+    parser.add_argument("--context_length", type=int, default=256)
+    parser.add_argument("--num_layers", type=int, default=4)
+    parser.add_argument("--d_model", type=int, default=512)
+    parser.add_argument("--num_heads", type=int, default=16)
+    parser.add_argument("--d_ff", type=int, default=1344)
+    parser.add_argument("--rope", action="store_true")
+    parser.add_argument("--theta", type=float, default=10000.0)
+    parser.add_argument("--eps", type=float, default=1e-5)
+    parser.add_argument(
+        "--dtype",
+        type=lambda x: getattr(torch, x),
+        default=torch.float32,
+        help="torch dtype, e.g. float32"
+    )
+    # training config
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--iterations", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=64)
+    # scheduler
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr_min", type=float, default=1e-5)
+    parser.add_argument("--warm_up_steps", type=int, default=100)
+    # optimizer
+    parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--max_l2_norm", type=float, default=1.0)
     args = parser.parse_args()
 
     # determine device
@@ -64,22 +96,31 @@ def train_pipeline():
                           dtype=args.dtype).to(device)
     model.train()
 
-    # build optimizer
-    optimizer = AdamW(params=model.parameters(),
-                      lr=args.lr,
-                      weight_decay=args.weight_decay)
-
-    # load tokenzied data
-    dataset = np.memmap(args.dataset_path, dtype=np.uint16, mode="r")
-
-    # training
+    # training config
     epochs = args.epochs
     iterations = args.iterations
     batch_size = args.batch_size
     context_length = args.context_length
     max_l2_norm = args.max_l2_norm
-    for i in range(epochs):
-        for j in range(iterations):
+
+    # build optimizer
+    optimizer = AdamW(params=model.parameters(),
+                      lr=args.lr,
+                      weight_decay=args.weight_decay)
+
+    # scheduler
+    lr_max = args.lr
+    lr_min = args.lr_min
+    warm_up_steps = args.warm_up_steps
+    total_steps = epochs * iterations
+
+    # load tokenzied data
+    dataset = np.memmap(args.dataset_path, dtype=np.uint16, mode="r")
+
+    # train loop
+    global_step = 0
+    for epoch in tqdm(range(epochs), leave=False, desc="Epoch:"):
+        for itr in tqdm(range(iterations), leave=False, desc="Batch:"):
             inputs, targets = data_load(dataset, batch_size, context_length, device)
 
             # forward
@@ -87,6 +128,8 @@ def train_pipeline():
 
             # loss compute
             loss = cross_entropy(logits, targets)
+            if global_step % 10 == 0:
+                tqdm.write(f"[INFO] loss: {loss.item():4f}")
 
             # gradient zeroing
             optimizer.zero_grad()
@@ -94,11 +137,26 @@ def train_pipeline():
             # backward
             loss.backward()
 
+            # gradient clip
+            if max_l2_norm and max_l2_norm > 0:
+                gradient_clipping(model.parameters(), max_l2_norm=max_l2_norm)
+
             # step
             optimizer.step()
+            global_step += 1
+
+            # lr scheduler
+            lr = cosine_annealing_scheduler(
+                global_step,
+                lr_max,
+                lr_min,
+                warm_up_steps,
+                total_steps
+            )
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr
     return model
 
 
 if __name__ == '__main__':
-    dataset = np.load("student/checkpoint/BPE/ids_valid.npy")
-    data_load(dataset=dataset, batch_size=4, context_length=4, device=torch.device("cuda:0"))
+    train_pipeline()
