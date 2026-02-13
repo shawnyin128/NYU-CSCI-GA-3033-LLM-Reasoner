@@ -2,6 +2,8 @@ import math
 import torch
 import torch.nn as nn
 
+from student.generate import nucleus_decoding
+
 
 class Linear(nn.Module):
     def __init__(self, in_features: int, out_features: int, device: torch.device = None, dtype: torch.dtype = None):
@@ -213,3 +215,16 @@ class TransformerLM(nn.Module):
         embed = self.norm(embed)
         logits = self.lm_head(embed)
         return logits
+
+    def generate(self, input_ids: torch.Tensor, max_new_tokens: int, temp: float = 1.0, top_p: float = 1.0, eos_token_id: int = 0):
+        self.eval()
+        for _ in range(max_new_tokens):
+            logits = self.forward(input_ids)
+            next_token_logits = logits[:, -1, :] # [B, V]
+            probs = softmax(next_token_logits, dim=-1, temp=temp)
+            next_token = nucleus_decoding(probs, top_p)
+            input_ids = torch.cat([input_ids, next_token], dim=1)
+
+            if (next_token == eos_token_id).all():
+                break
+        return input_ids
