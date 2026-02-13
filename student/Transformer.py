@@ -10,8 +10,7 @@ class Linear(nn.Module):
         self.out_features = out_features
         self.weight = nn.Parameter(torch.zeros(out_features, in_features, device=device, dtype=dtype))
 
-        # init
-        std = math.sqrt(2.0 / (in_features + out_features))
+        std = math.sqrt(2.0 / (self.in_features + self.out_features))
         torch.nn.init.trunc_normal_(self.weight, mean=0.0, std=std, a=-3*std, b=3*std)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -26,3 +25,21 @@ class Embedding(nn.Module):
 
     def forward(self, token_ids: torch.Tensor):
         return self.weight[token_ids]
+
+
+class RMSNorm(nn.Module):
+    def __init__(self, d_model: int, eps: float = 1e-5, device: torch.device = None, dtype: torch.dtype = None):
+        super().__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
+
+    def forward(self, x: torch.Tensor):
+        input_dtype = x.dtype
+        x = x.to(torch.float32)
+        a_square = x.pow(2)
+        a_square_sum = a_square.sum(dim=-1, keepdim=True)
+        rms = torch.sqrt((a_square_sum / self.d_model) + self.eps)
+        return ((x / rms) * self.weight).to(input_dtype)
+
+
