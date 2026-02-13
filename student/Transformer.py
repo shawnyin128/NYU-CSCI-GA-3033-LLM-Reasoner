@@ -132,6 +132,7 @@ class MultiHeadAttention(nn.Module):
             self.rope_emb = None
 
     def forward(self, x: torch.Tensor):
+        S = x.shape[1]
         input_shape = x.shape[:-1] # [B, S]
         hidden_shape = (*input_shape, self.num_heads, -1) # [B, S, H, d_h]
 
@@ -140,7 +141,7 @@ class MultiHeadAttention(nn.Module):
         value = self.v_proj(x).view(hidden_shape).transpose(1, 2)
 
         if self.rope:
-            position = torch.arange(input_shape[-1], device=x.device).unsqueeze(0).expand(input_shape)
+            position = torch.arange(S, device=x.device)
             query = self.rope_emb(query, position)
             key = self.rope_emb(key, position)
 

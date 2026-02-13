@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import wandb
+import time
 
 from tqdm import tqdm
 
@@ -47,7 +48,8 @@ def train_pipeline():
     # argparse
     parser = argparse.ArgumentParser()
     # dataset config
-    parser.add_argument("--dataset_path", type=str, default="student/checkpoint/BPE/ids_train.npy")
+    parser.add_argument("--train_dataset_path", type=str, default="student/checkpoint/BPE/ids_train.npy")
+    parser.add_argument("--valid_dataset_path", type=str, default="student/checkpoint/BPE/ids_valid.npy")
     parser.add_argument("--vocab_size", type=int, default=10000)
     # model config
     parser.add_argument("--context_length", type=int, default=256)
@@ -66,8 +68,8 @@ def train_pipeline():
     )
     # training config
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--iterations", type=int, default=64)
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--iterations", type=int, default=128)
+    parser.add_argument("--batch_size", type=int, default=128)
     # scheduler
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--lr_min", type=float, default=1e-5)
@@ -124,13 +126,15 @@ def train_pipeline():
     total_steps = epochs * iterations
 
     # load tokenzied data
-    dataset = np.memmap(args.dataset_path, dtype=np.uint16, mode="r")
+    train_dataset = np.memmap(args.train_dataset_path, dtype=np.uint16, mode="r")
+    valid_dataset = np.memmap(args.valid_dataset_path, dtype=np.uint16, mode="r")
 
     # train loop
     global_step = 0
+    start_time = time.time()
     for epoch in tqdm(range(epochs), leave=False, desc="Epoch:"):
         for itr in tqdm(range(iterations), leave=False, desc="Batch:"):
-            inputs, targets = data_load(dataset, batch_size, context_length, device)
+            inputs, targets = data_load(train_dataset, batch_size, context_length, device)
 
             # forward
             logits = model(inputs)
@@ -165,14 +169,21 @@ def train_pipeline():
 
             # logging
             if global_step % 10 == 0:
+                # evaluate on valid dataset
+                valid_inputs, valid_targets = data_load(valid_dataset, batch_size, context_length, device)
+                valid_logits = model(valid_inputs)
+                valid_loss = cross_entropy(valid_logits, valid_targets)
                 wandb.log({
-                    "loss": loss.item(),
+                    "train_loss": loss.item(),
+                    "valid_loss": valid_loss.item(),
                     "lr": optimizer.param_groups[0]["lr"],
                     "step": global_step,
+                    "wallclock": time.time() - start_time,
                 })
 
             # save model
-            save_checkpoint(model, optimizer, global_step, args.out_path)
+            if global_step % 100 == 0:
+                save_checkpoint(model, optimizer, global_step, args.out_path)
     return model
 
 
