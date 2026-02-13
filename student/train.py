@@ -92,6 +92,15 @@ class AdamW(torch.optim.Optimizer):
         return loss
 
 
+def cosine_annealing_scheduler(iter: int, lr_max: float, lr_min: float, warm_up_steps: int, cosine_annealing_steps: int):
+    if iter < warm_up_steps:
+        return (iter / warm_up_steps) * lr_max
+    elif iter > cosine_annealing_steps:
+        return lr_min
+    else:
+        return lr_min + 0.5 * (1 + math.cos(math.pi * (iter - warm_up_steps) / (cosine_annealing_steps - warm_up_steps))) * (lr_max - lr_min)
+
+
 if __name__ == "__main__":
     weights = torch.nn.Parameter(5 * torch.randn((10, 10), device="cuda"))
     opt = SGD([weights], lr=1e3)
