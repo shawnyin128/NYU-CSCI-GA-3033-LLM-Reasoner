@@ -37,7 +37,6 @@ def run_linear(
     return linear(in_features)
 
 
-
 def run_embedding(
     vocab_size: int,
     d_model: int,
