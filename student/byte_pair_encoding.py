@@ -4,7 +4,7 @@ import os
 from collections import defaultdict
 
 import regex as re
-from typing import BinaryIO
+from typing import BinaryIO, Iterable
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
@@ -60,6 +60,17 @@ def remove_special_tokens(corpus_chunk: str, special_tokens: list[str]):
     special_tokens_str = "|".join(escaped_special_tokens) # | here stands for or
     clean_corpus_chunk = re.split(special_tokens_str, corpus_chunk) # split by any special token
     return clean_corpus_chunk
+
+
+def bpe_pre_tokenize(corpus_chunk: str, special_tokens: list[str]):
+    byte_tokens = []
+    chunk_wo_st = remove_special_tokens(corpus_chunk, special_tokens)
+    for text in chunk_wo_st:
+        for match in re.finditer(PAT, text):
+            token = match.group()
+            byte_token = tuple(bytes([b]) for b in token.encode("utf-8"))
+            byte_tokens.append(byte_token)
+    return byte_tokens
 
 
 def bpe_pre_tokenize_worker(input_path: str, start: int, end: int, special_tokens: list[str]):
@@ -294,7 +305,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str], mode:
         return train_bpe_fast(input_path, vocab_size, special_tokens)
 
 
-def save_bpe(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], output_path: str, type: str = "val"):
+def save_bpe(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], output_path: str, type: str = "train"):
     serializable_vocab = {
         str(k): v.decode("latin-1")
         for k, v in vocab.items()
@@ -312,21 +323,97 @@ def save_bpe(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], output_
         json.dump(serializable_merges, f, ensure_ascii=False)
 
 
+def load_bpe(vocab_filepath: str, merges_filepath: str, type: str = "train"):
+    vocab_path = os.path.join(vocab_filepath, f"vocab_{type}.json")
+    merges_path = os.path.join(merges_filepath, f"merges_{type}.json")
+    with open(vocab_path, "r", encoding="utf-8") as f:
+        vocab = json.load(f)
+
+        vocab = {
+            int(k): v.encode("latin-1")
+            for k, v in vocab.items()
+        }
+
+    with open(merges_path, "r", encoding="utf-8") as f:
+        merges = json.load(f)
+
+        merges = [
+            (a.encode("latin-1"), b.encode("latin-1"))
+            for a, b in merges
+        ]
+    return vocab, merges
+
+
+class Tokenizer:
+    def __init__(self, vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], special_tokens: list[str] = None):
+        self.vocab = vocab
+        self.merges = merges
+        self.special_tokens = special_tokens
+
+    def _preprocess_vocab_and_merges(self):
+        self.inv_vocab = {v: k for k, v in self.vocab.items()}
+        self.merges_map = {merge: i for i, merge in enumerate(self.merges)}
+
+    @classmethod
+    def from_files(cls, vocab_filepath: str, merges_filepath: str, special_tokens=None):
+        vocab, merges = load_bpe(vocab_filepath, merges_filepath)
+        return cls(vocab, merges, special_tokens)
+
+    def encode(self, text: str):
+        # 1. pre-tokenize, represent using UTF-8 bytes
+        pre_tokenized_text = bpe_pre_tokenize(text, self.special_tokens)
+        # 2. apply merges
+        for i in range(len(pre_tokenized_text)):
+            word = pre_tokenized_text[i]
+            while True:
+                best_pair = None
+                best_index = None
+                best_rank = float("inf")
+                for j in range(len(word) - 1):
+                    pair = (word[j], word[j + 1])
+                    if pair in self.merges_map:
+                        rank = self.merges_map[pair]
+                        if rank < best_rank:
+                            best_rank = rank
+                            best_pair = pair
+                            best_index = j
+                if best_pair is not None:
+                    merge_token = best_pair[0] + best_pair[1]
+                    word = word[:best_index] + (merge_token,) + word[best_index + 2:]
+                else:
+                    break
+            pre_tokenized_text[i] = word
+        # 3. go to vocab and get ids
+        ids = []
+        for word in pre_tokenized_text:
+            for tok in word:
+                ids.append(self.inv_vocab[tok])
+        return ids
+
+    def encode_iterable(self, iterable: Iterable[str]):
+        for text in iterable:
+            ids = self.encode(text)
+            for id in ids:
+                yield id
+
+    def decode(self, ids: list[int]):
+        pass
+
 if __name__ == "__main__":
-    import time
-    import tracemalloc
-    import cProfile
-    import pstats
-
-    start_time = time.time()
-
-    vocab, merge = train_bpe("../data/TinyStoriesV2-GPT4-train.txt", 10000, ["<|endoftext|>"], "fast")
-
-    end_time = time.time()
-
-    print("Time:", end_time - start_time)
-
-    save_bpe(vocab, merge, "./checkpoint", "train")
+    # import time
+    # import tracemalloc
+    # import cProfile
+    # import pstats
+    #
+    # start_time = time.time()
+    #
+    # vocab, merge = train_bpe("../data/TinyStoriesV2-GPT4-train.txt", 10000, ["<|endoftext|>"], "fast")
+    #
+    # end_time = time.time()
+    #
+    # print("Time:", end_time - start_time)
+    #
+    # save_bpe(vocab, merge, "./checkpoint/BPE", "train")
 #
 #     cProfile.run(
 #         'train_bpe_naive("../data/TinyStoriesV2-GPT4-valid.txt", 10000, ["<|endoftext|>"])',
@@ -334,3 +421,5 @@ if __name__ == "__main__":
 #     )
 #     stats = pstats.Stats('profile_output')
 #     stats.sort_stats('cumulative').print_stats(20)
+    text = 'the cat ate'
+    print(bpe_pre_tokenize(text, ["<|endoftext|>"]))
