@@ -43,3 +43,26 @@ class RMSNorm(nn.Module):
         return ((x / rms) * self.weight).to(input_dtype)
 
 
+class SwiGLU(nn.Module):
+    def __init__(self, d_model: int, d_ff: int, device: torch.device = None, dtype: torch.dtype = None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+
+        std = math.sqrt(2.0 / (self.d_model + self.d_ff))
+        self.weight1 = nn.Parameter(torch.zeros(self.d_ff, self.d_model, device=device, dtype=dtype))
+        self.weight2 = nn.Parameter(torch.zeros(self.d_model, self.d_ff, device=device, dtype=dtype))
+        self.weight3 = nn.Parameter(torch.zeros(self.d_ff, self.d_model, device=device, dtype=dtype))
+
+        torch.nn.init.trunc_normal_(self.weight1, mean=0.0, std=std, a=-3*std, b=3*std)
+        torch.nn.init.trunc_normal_(self.weight2, mean=0.0, std=std, a=-3*std, b=3*std)
+        torch.nn.init.trunc_normal_(self.weight3, mean=0.0, std=std, a=-3*std, b=3*std)
+
+    def SiLU(self, x: torch.Tensor):
+        return x * torch.sigmoid(x)
+
+    def forward(self, x: torch.Tensor):
+        gate = self.SiLU(x @ self.weight1.t())
+        up = gate * (x @ self.weight3.t())
+        down = up @ self.weight2.t()
+        return down

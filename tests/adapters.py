@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from student.byte_pair_encoding import train_bpe, Tokenizer
-from student.Transformer import Linear, Embedding, RMSNorm
+from student.Transformer import Linear, Embedding, RMSNorm, SwiGLU
 
 
 def run_linear(
@@ -90,7 +90,12 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    ffn = SwiGLU(d_model=d_model, d_ff=d_ff)
+    with torch.no_grad():
+        ffn.weight1.copy_(w1_weight)
+        ffn.weight2.copy_(w2_weight)
+        ffn.weight3.copy_(w3_weight)
+    return ffn(in_features)
 
 
 def run_scaled_dot_product_attention(
