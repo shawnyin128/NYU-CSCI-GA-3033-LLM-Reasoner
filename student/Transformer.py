@@ -149,3 +149,37 @@ class MultiHeadAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, rope: bool = False, theta: float = None,
+                 eps: float = 1e-5, max_seq_len: int = None, device: torch.device = None, dtype: torch.dtype = None):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.self_attn = MultiHeadAttention(d_model=d_model,
+                                            num_heads=num_heads,
+                                            rope=rope,
+                                            theta=theta,
+                                            max_seq_len=max_seq_len,
+                                            device=device,
+                                            dtype=dtype)
+
+        self.d_ff = d_ff
+        self.ffn = SwiGLU(d_model=d_model, d_ff=d_ff, device=device, dtype=dtype)
+
+        self.input_norm = RMSNorm(d_model=d_model, eps=eps, device=device, dtype=dtype)
+        self.post_atten_norm = RMSNorm(d_model=d_model, eps=eps, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor):
+        residual = x
+        x = self.input_norm(x)
+        x = self.self_attn(x)
+        x = residual + x
+
+        residual = x
+        x = self.post_atten_norm(x)
+        x = self.ffn(x)
+        x = residual + x
+        return x
+

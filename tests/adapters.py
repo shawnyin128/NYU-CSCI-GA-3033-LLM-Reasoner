@@ -11,7 +11,7 @@ from torch import Tensor
 
 from student.byte_pair_encoding import train_bpe, Tokenizer
 from student.Transformer import (Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, softmax,
-                                 scaled_dot_product_attention, MultiHeadAttention)
+                                 scaled_dot_product_attention, MultiHeadAttention, TransformerBlock)
 
 
 def run_linear(
@@ -303,7 +303,18 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    block = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, rope=True, theta=theta, max_seq_len=max_seq_len)
+    with torch.no_grad():
+        block.input_norm.weight.copy_(weights['ln1.weight'])
+        block.self_attn.q_proj.weight.copy_(weights['attn.q_proj.weight'])
+        block.self_attn.k_proj.weight.copy_(weights['attn.k_proj.weight'])
+        block.self_attn.v_proj.weight.copy_(weights['attn.v_proj.weight'])
+        block.self_attn.o_proj.weight.copy_(weights['attn.output_proj.weight'])
+        block.post_atten_norm.weight.copy_(weights['ln2.weight'])
+        block.ffn.gate_proj.weight.copy_(weights['ffn.w1.weight'])
+        block.ffn.up_proj.weight.copy_(weights['ffn.w3.weight'])
+        block.ffn.down_proj.weight.copy_(weights['ffn.w2.weight'])
+    return block(in_features)
 
 
 def run_transformer_lm(
