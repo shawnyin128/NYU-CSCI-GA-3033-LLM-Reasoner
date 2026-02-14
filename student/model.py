@@ -43,6 +43,10 @@ class RMSNorm(nn.Module):
         return ((x / rms) * self.weight).to(input_dtype)
 
 
+def SiLU(x: torch.Tensor):
+    return x * torch.sigmoid(x)
+
+
 class SwiGLU(nn.Module):
     def __init__(self, d_model: int, d_ff: int, device: torch.device = None, dtype: torch.dtype = None):
         super().__init__()
@@ -53,11 +57,8 @@ class SwiGLU(nn.Module):
         self.up_proj = Linear(in_features=self.d_model, out_features=self.d_ff, device=device, dtype=dtype)
         self.down_proj = Linear(in_features=self.d_ff, out_features=self.d_model, device=device, dtype=dtype)
 
-    def SiLU(self, x: torch.Tensor):
-        return x * torch.sigmoid(x)
-
     def forward(self, x: torch.Tensor):
-        gate_out = self.SiLU(self.gate_proj(x))
+        gate_out = SiLU(self.gate_proj(x))
         up_out = gate_out * self.up_proj(x)
         down_out = self.down_proj(up_out)
         return down_out
@@ -72,11 +73,8 @@ class SiLUFFN(nn.Module):
         self.up_proj = Linear(in_features=self.d_model, out_features=self.d_ff, device=device, dtype=dtype)
         self.down_proj = Linear(in_features=self.d_ff, out_features=self.d_model, device=device, dtype=dtype)
 
-    def SiLU(self, x: torch.Tensor):
-        return x * torch.sigmoid(x)
-
     def forward(self, x: torch.Tensor):
-        up_out = self.SiLU(self.up_proj(x))
+        up_out = SiLU(self.up_proj(x))
         down_out = self.down_proj(up_out)
         return down_out
 
