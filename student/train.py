@@ -73,9 +73,9 @@ def train_pipeline():
     # scheduler
     parser.add_argument("--lr", type=float, default=2.5e-3)
     parser.add_argument("--lr_min", type=float, default=1e-5)
-    parser.add_argument("--warm_up_steps", type=int, default=100)
+    parser.add_argument("--warm_up_steps", type=int, default=500)
     # optimizer
-    parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--weight_decay", type=float, default=0.001)
     parser.add_argument("--max_l2_norm", type=float, default=1.0)
     # save
     parser.add_argument("--out_path", type=str, default="student/checkpoint/model/model.pt")
@@ -85,7 +85,7 @@ def train_pipeline():
 
     # wandb init
     wandb.init(
-        project="LLM-A1-BS",
+        project="LLM-A1-Norm",
         config=vars(args)
     )
 

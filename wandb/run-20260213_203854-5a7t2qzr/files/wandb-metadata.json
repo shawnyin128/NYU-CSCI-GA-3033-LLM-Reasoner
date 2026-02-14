@@ -1,0 +1,66 @@
+{
+  "os": "Linux-5.14.0-570.30.1.el9_6.x86_64-x86_64-with-glibc2.34",
+  "python": "CPython 3.13.12",
+  "startedAt": "2026-02-14T01:38:54.019167Z",
+  "args": [
+    "--device",
+    "cuda:1",
+    "--rope"
+  ],
+  "program": "/home/yxy/NYU-CSCI-GA-3033-LLM-Reasoner/student/train.py",
+  "codePath": "student/train.py",
+  "codePathLocal": "student/train.py",
+  "git": {
+    "remote": "https://github.com/shawnyin128/NYU-CSCI-GA-3033-LLM-Reasoner.git",
+    "commit": "f46b923995f197a4ea9c4e7232a73a64cfba9219"
+  },
+  "email": "xy2053@nyu.edu",
+  "root": "/home/yxy/NYU-CSCI-GA-3033-LLM-Reasoner",
+  "host": "eng-wl3181-lab-device-02.engineering.nyu.edu",
+  "executable": "/home/yxy/NYU-CSCI-GA-3033-LLM-Reasoner/.venv/bin/python3",
+  "cpu_count": 20,
+  "cpu_count_logical": 40,
+  "gpu": "NVIDIA RTX A6000",
+  "gpu_count": 4,
+  "disk": {
+    "/": {
+      "total": "1868257927168",
+      "used": "1792157880320"
+    }
+  },
+  "memory": {
+    "total": "539765178368"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-82d58b4b-52f4-5078-4c9c-135d0c81ff1b"
+    },
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-2637ae15-9416-eae7-88bb-ef14fac59d58"
+    },
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-ff17ac04-e5dd-ebc1-05b5-7fe90b54ba9d"
+    },
+    {
+      "name": "NVIDIA RTX A6000",
+      "memoryTotal": "51527024640",
+      "cudaCores": 10752,
+      "architecture": "Ampere",
+      "uuid": "GPU-4950cbdf-4d42-fab6-1934-9dd8c8e8825a"
+    }
+  ],
+  "cudaVersion": "12.8",
+  "writerId": "k8r1qdmrx63zhs601rvbey8swl0qie5e"
+}

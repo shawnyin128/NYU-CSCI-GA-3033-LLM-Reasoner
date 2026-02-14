@@ -63,6 +63,23 @@ class SwiGLU(nn.Module):
         return down_out
 
 
+class SiLUFFN(nn.Module):
+    def __init__(self, d_model: int, d_ff: int, device: torch.device = None, dtype: torch.dtype = None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+
+        self.up_proj = Linear(in_features=self.d_model, out_features=self.d_ff, device=device, dtype=dtype)
+        self.down_proj = Linear(in_features=self.d_ff, out_features=self.d_model, device=device, dtype=dtype)
+
+    def SiLU(self, x: torch.Tensor):
+        return x * torch.sigmoid(x)
+
+    def forward(self, x: torch.Tensor):
+        up_out = self.SiLU(self.up_proj(x))
+        down_out = self.down_proj(up_out)
+        return down_out
+
 class RotaryPositionalEmbedding(nn.Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device: torch.device = None):
         super().__init__()
@@ -169,6 +186,7 @@ class TransformerBlock(nn.Module):
 
         self.d_ff = d_ff
         self.ffn = SwiGLU(d_model=d_model, d_ff=d_ff, device=device, dtype=dtype)
+        # self.ffn = SiLUFFN(d_model=d_model, d_ff=d_ff, device=device, dtype=dtype)
 
         self.input_norm = RMSNorm(d_model=d_model, eps=eps, device=device, dtype=dtype)
         self.post_atten_norm = RMSNorm(d_model=d_model, eps=eps, device=device, dtype=dtype)
