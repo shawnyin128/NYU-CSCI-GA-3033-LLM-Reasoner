@@ -7,7 +7,7 @@ import time
 
 from tqdm import tqdm
 
-from student.Transformer import TransformerLM
+from student.model import TransformerLM
 from student.optimize import AdamW, cosine_annealing_scheduler, gradient_clipping, cross_entropy
 
 
@@ -67,11 +67,11 @@ def train_pipeline():
         help="torch dtype, e.g. float32"
     )
     # training config
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--iterations", type=int, default=128)
-    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--iterations", type=int, default=50)
+    parser.add_argument("--batch_size", type=int, default=180)
     # scheduler
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=2.5e-3)
     parser.add_argument("--lr_min", type=float, default=1e-5)
     parser.add_argument("--warm_up_steps", type=int, default=100)
     # optimizer
@@ -79,19 +79,21 @@ def train_pipeline():
     parser.add_argument("--max_l2_norm", type=float, default=1.0)
     # save
     parser.add_argument("--out_path", type=str, default="student/checkpoint/model/model.pt")
+    # device
+    parser.add_argument("--device", type=str, default="cuda:0")
     args = parser.parse_args()
 
     # wandb init
     wandb.init(
-        project="LLM-A1-test",
+        project="LLM-A1-BS",
         config=vars(args)
     )
 
     # determine device
-    if torch.cuda.is_available():
-        device = "cuda"
-    else:
+    if not torch.cuda.is_available():
         device = "cpu"
+    else:
+        device = args.device
 
     # init model
     model = TransformerLM(vocab_size=args.vocab_size,
@@ -168,7 +170,7 @@ def train_pipeline():
                 param_group["lr"] = lr
 
             # logging
-            if global_step % 10 == 0:
+            if global_step % 5 == 0:
                 # evaluate on valid dataset
                 valid_inputs, valid_targets = data_load(valid_dataset, batch_size, context_length, device)
                 valid_logits = model(valid_inputs)

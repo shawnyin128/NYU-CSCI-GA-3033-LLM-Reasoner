@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from student.byte_pair_encoding import train_bpe, Tokenizer
-from student.Transformer import (Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, softmax,
+from student.model import (Linear, Embedding, RMSNorm, SwiGLU, RotaryPositionalEmbedding, softmax,
                                  scaled_dot_product_attention, MultiHeadAttention, TransformerBlock, TransformerLM)
 from student.optimize import cross_entropy, AdamW, cosine_annealing_scheduler, gradient_clipping
 from student.train import data_load, save_checkpoint, load_checkpoint

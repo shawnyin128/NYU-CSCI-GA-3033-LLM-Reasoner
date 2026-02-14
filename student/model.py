@@ -2,8 +2,6 @@ import math
 import torch
 import torch.nn as nn
 
-from student.generate import nucleus_decoding
-
 
 class Linear(nn.Module):
     def __init__(self, in_features: int, out_features: int, device: torch.device = None, dtype: torch.dtype = None):
@@ -186,6 +184,21 @@ class TransformerBlock(nn.Module):
         x = self.ffn(x)
         x = residual + x
         return x
+
+
+def nucleus_decoding(q: torch.Tensor, p: float):
+    sorted_q, sorted_indices = torch.sort(q, descending=True, dim=-1)
+    cumulative = torch.cumsum(sorted_q, dim=-1)
+
+    mask = cumulative > p
+    mask[..., 1:] = mask[..., :-1].clone()
+    mask[..., 0] = False
+
+    sorted_q[mask] = 0.0
+    sorted_q = sorted_q / sorted_q.sum(dim=-1, keepdim=True)
+    sampled_sorted = torch.multinomial(sorted_q, num_samples=1)
+    sampled = torch.gather(sorted_indices, -1, sampled_sorted)
+    return sampled
 
 
 class TransformerLM(nn.Module):

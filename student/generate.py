@@ -1,23 +1,14 @@
 import torch
+import argparse
 
-def nucleus_decoding(q: torch.Tensor, p: float):
-    sorted_q, sorted_indices = torch.sort(q, descending=True, dim=-1)
-    cumulative = torch.cumsum(sorted_q, dim=-1)
-
-    mask = cumulative > p
-    mask[..., 1:] = mask[..., :-1].clone()
-    mask[..., 0] = False
-
-    sorted_q[mask] = 0.0
-    sorted_q = sorted_q / sorted_q.sum(dim=-1, keepdim=True)
-    sampled_sorted = torch.multinomial(sorted_q, num_samples=1)
-    sampled = torch.gather(sorted_indices, -1, sampled_sorted)
-    return sampled
+from student.byte_pair_encoding import Tokenizer
+from student.model import TransformerLM
 
 
 def model_generation():
     parser = argparse.ArgumentParser()
     # model config
+    parser.add_argument("--vocab_size", type=int, default=10000)
     parser.add_argument("--context_length", type=int, default=256)
     parser.add_argument("--num_layers", type=int, default=4)
     parser.add_argument("--d_model", type=int, default=512)
@@ -36,7 +27,7 @@ def model_generation():
     parser.add_argument("--max_new_tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=1.0)
-    parser.add_argument("--eos_token_id", type=int, default=None)
+    parser.add_argument("--eos_token_id", type=int, default=0)
     # checkpoint path
     parser.add_argument("--checkpoint_path", type=str, default="student/checkpoint/model/model.pt")
     # prompt
@@ -69,43 +60,22 @@ def model_generation():
     model.load_state_dict(checkpoint["model"])
     model.eval()
 
-    # ===== tokenizer =====
-    # 你已有 tokenizer 实现
-    tokenizer = load_your_tokenizer_somehow()
+    # tokenizer
+    tokenizer = Tokenizer.from_files("student/checkpoint/BPE", "student/checkpoint/BPE", special_tokens=["<|endoftext|>"])
 
-    # ===== encode prompt =====
+    # tokenize prompt
     input_ids = tokenizer.encode(args.prompt)
     input_ids = torch.tensor(input_ids, dtype=torch.long, device=device).unsqueeze(0)
 
-    # ===== generation loop =====
+    # generate loop
     with torch.no_grad():
-        for _ in range(args.max_new_tokens):
+        generated = model.generate(input_ids, max_new_tokens=args.max_new_tokens, temp=args.temperature, top_p=args.top_p, eos_token_id=args.eos_token_id)
 
-            # 裁剪 context window
-            if input_ids.size(1) > args.context_length:
-                input_ids = input_ids[:, -args.context_length:]
-
-            logits = model(input_ids)
-            next_token_logits = logits[:, -1, :]  # [B, V]
-
-            # temperature
-            probs = softmax(next_token_logits, dim=-1, temp=args.temperature)
-
-            # nucleus sampling
-            if args.top_p < 1.0:
-                next_token = nucleus_decoding(probs, args.top_p)
-            else:
-                next_token = torch.multinomial(probs, num_samples=1)
-
-            input_ids = torch.cat([input_ids, next_token], dim=1)
-
-            if args.eos_token_id is not None:
-                if (next_token == args.eos_token_id).all():
-                    break
-
-    # ===== decode =====
-    generated_ids = input_ids.squeeze(0).tolist()
+    generated_ids = generated.squeeze(0).tolist()
     text = tokenizer.decode(generated_ids)
 
-    print("\n===== Generated Text =====\n")
     print(text)
+
+
+if __name__ == "__main__":
+    model_generation()
