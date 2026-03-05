@@ -19,7 +19,7 @@ parser.add_argument("--batch-size", type=int, default=4)
 parser.add_argument("--warmup-steps", type=int, default=10)
 parser.add_argument("--num-steps", type=int, default=50)
 parser.add_argument("--pass-type", choices=["forward", "forward_backward"], default="forward_backward")
-parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
 args = parser.parse_args()
 
 device = args.device

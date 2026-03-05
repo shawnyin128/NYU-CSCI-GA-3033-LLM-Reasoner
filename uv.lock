@@ -13,7 +13,7 @@ resolution-markers = [
 [[package]]
 name = "a1-basics"
 version = "1.0.3"
-source = { editable = "a1-basics" }
+source = { directory = "a1-basics" }
 dependencies = [
     { name = "einops" },
     { name = "einx" },
@@ -985,7 +985,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "a1-basics", editable = "a1-basics" },
+    { name = "a1-basics", directory = "a1-basics" },
     { name = "humanfriendly" },
     { name = "matplotlib" },
     { name = "numpy" },
