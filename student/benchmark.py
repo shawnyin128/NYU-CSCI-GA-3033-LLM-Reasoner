@@ -3,11 +3,14 @@ import timeit
 import torch
 import torch.cuda.nvtx as nvtx
 
+import a1_basics.model as a1model
+import a1_basics.nn_utils as a1utils
+
 from torch import Tensor
 from einops import einsum
 from jaxtyping import Float, Bool, Int
-import a1_basics.model as a1model
-import a1_basics.nn_utils as a1utils, softmax
+
+from a1_basics.nn_utils import softmax
 
 
 @nvtx.range("scaled dot product attention")
