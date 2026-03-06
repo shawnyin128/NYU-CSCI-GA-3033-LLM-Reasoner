@@ -57,10 +57,8 @@ def bench_one(seq_len, d, dtype):
         O_t, L_t = triton_fwd(Q, K, V)
         dO = torch.ones_like(O_t)
 
-        fwd_ms  = triton.testing.do_bench(lambda: triton_fwd(Q, K, V))
-        bwd_ms  = triton.testing.do_bench(lambda: flash_attention_backward(Q, K, V, O_t, dO, L_t, True))
-        e2e_ms  = triton.testing.do_bench(lambda: flash_attention_backward(
-                      Q, K, V, *triton_fwd(Q, K, V)[:], dO if False else torch.ones_like(triton_fwd(Q, K, V)[0]), True))
+        fwd_ms = triton.testing.do_bench(lambda: triton_fwd(Q, K, V))
+        bwd_ms = triton.testing.do_bench(lambda: flash_attention_backward(Q, K, V, O_t, dO, L_t, True))
 
         def triton_e2e():
             O_, L_ = triton_fwd(Q, K, V)
@@ -68,8 +66,12 @@ def bench_one(seq_len, d, dtype):
         e2e_ms = triton.testing.do_bench(triton_e2e)
 
         results['triton'] = (fwd_ms, bwd_ms, e2e_ms)
-    except Exception as e:
+    except torch.cuda.OutOfMemoryError:
+        torch.cuda.empty_cache()
         results['triton'] = ('OOM', 'OOM', 'OOM')
+    except Exception as e:
+        results['triton'] = (f'ERR:{type(e).__name__}', '---', '---')
+        print(f"  [triton error seq={seq_len} d={d}] {e}")
 
     try:
         Q_pt = Q.clone().requires_grad_(True)
@@ -103,8 +105,12 @@ def bench_one(seq_len, d, dtype):
         bwd_ms_pt = triton.testing.do_bench(lambda: out_b.backward(dO_pt, retain_graph=True))
 
         results['pytorch'] = (fwd_ms_pt, bwd_ms_pt, e2e_ms_pt)
-    except Exception as e:
+    except torch.cuda.OutOfMemoryError:
+        torch.cuda.empty_cache()
         results['pytorch'] = ('OOM', 'OOM', 'OOM')
+    except Exception as e:
+        results['pytorch'] = (f'ERR:{type(e).__name__}', '---', '---')
+        print(f"  [pytorch error seq={seq_len} d={d}] {e}")
 
     return results
 
