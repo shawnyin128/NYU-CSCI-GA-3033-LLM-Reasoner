@@ -65,6 +65,7 @@ parser.add_argument("--pass-type", choices=["forward", "forward_backward", "trai
 parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
 parser.add_argument("--bf16", action="store_true")
 parser.add_argument("--memory", action="store_true")
+parser.add_argument("--compile", action="store_true")
 args = parser.parse_args()
 
 if args.model_size is not None:
@@ -82,6 +83,9 @@ model = a1model.BasicsTransformerLM(
     d_ff=args.d_ff,
     rope_theta=args.rope_theta,
 ).to(device)
+
+if args.compile:
+    model = torch.compile(model)
 
 x = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=device)
 y = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=device)
@@ -188,7 +192,7 @@ def stats(times):
     std = (sum((t - avg) ** 2 for t in times) / len(times)) ** 0.5
     return avg * 1000, std * 1000
 
-tag = f"{args.model_size or 'custom'}{'|bf16' if args.bf16 else ''}"
+tag = f"{args.model_size or 'custom'}{'|bf16' if args.bf16 else ''}{'|compiled' if args.compile else ''}"
 if args.pass_type == "forward":
     avg, std = stats(fwd_times)
     print(f"[{tag}] forward   | avg: {avg:.2f} ms, std: {std:.2f} ms")
