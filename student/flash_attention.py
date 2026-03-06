@@ -4,6 +4,33 @@ import triton
 import triton.language as tl
 
 
+@torch.compile
+def flash_attention_backward(Q, K, V, O, dO, L, is_causal=False):
+    B, N, d = Q.shape
+    scale = 1.0 / math.sqrt(d)
+
+    D = (dO * O).sum(dim=-1)
+
+    S = torch.einsum('bqd,bkd->bqk', Q, K) * scale
+
+    if is_causal:
+        idx = torch.arange(N, device=Q.device)
+        causal_mask = idx[:, None] >= idx[None, :]
+        S = torch.where(causal_mask[None], S, torch.tensor(-1e6, device=Q.device, dtype=S.dtype))
+
+    P = torch.exp(S - L[:, :, None])
+
+    dV = torch.einsum('bqk,bqd->bkd', P, dO)
+    dP = torch.einsum('bqd,bkd->bqk', dO, V)
+
+    dS = P * (dP - D[:, :, None])
+
+    dQ = torch.einsum('bqk,bkd->bqd', dS, K) * scale
+    dK = torch.einsum('bqk,bqd->bkd', dS, Q) * scale
+
+    return dQ, dK, dV
+
+
 class FlashAttentionPytorch(torch.autograd.Function):
     @staticmethod
     def forward(ctx, Q, K, V, is_causal=False):
@@ -62,7 +89,9 @@ class FlashAttentionPytorch(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dO):
-        raise NotImplementedError
+        Q, K, V, O, L = ctx.saved_tensors
+        dQ, dK, dV = flash_attention_backward(Q, K, V, O, dO, L, ctx.is_causal)
+        return dQ, dK, dV, None
 
 
 @triton.jit
@@ -205,4 +234,6 @@ class FlashAttentionTriton(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dO):
-        raise NotImplementedError
+        Q, K, V, O, L = ctx.saved_tensors
+        dQ, dK, dV = flash_attention_backward(Q, K, V, O, dO, L, ctx.is_causal)
+        return dQ, dK, dV, None
