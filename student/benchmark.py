@@ -63,7 +63,8 @@ parser.add_argument("--warmup-steps", type=int, default=5)
 parser.add_argument("--num-steps", type=int, default=10)
 parser.add_argument("--pass-type", choices=["forward", "forward_backward", "train"], default="forward_backward")
 parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
-parser.add_argument("--bf16", action="store_true", help="Use BF16 mixed precision for forward pass")
+parser.add_argument("--bf16", action="store_true")
+parser.add_argument("--memory", action="store_true")
 args = parser.parse_args()
 
 if args.model_size is not None:
@@ -143,27 +144,44 @@ for _ in range(args.num_steps):
             fwd_times.append(t1 - t0)
             bwd_times.append(t2 - t1)
         else:
+            tag = f"{args.model_size or 'custom'}_ctx{args.context_length}"
             optimizer.zero_grad()
             t0 = timeit.default_timer()
+            if args.memory:
+                torch.cuda.memory._record_memory_history(max_entries=1000000)
             with nvtx.range("forward"), autocast_ctx:
                 logits = model(x)
                 loss = a1utils.cross_entropy(logits, y)
             if device.type == "cuda":
                 torch.cuda.synchronize()
+            if args.memory:
+                torch.cuda.memory._dump_snapshot(f"memory_{tag}_forward.pickle")
+                torch.cuda.memory._record_memory_history(enabled=None)
             t1 = timeit.default_timer()
+            if args.memory:
+                torch.cuda.memory._record_memory_history(max_entries=1000000)
             with nvtx.range("backward"):
                 loss.backward()
             if device.type == "cuda":
                 torch.cuda.synchronize()
+            if args.memory:
+                torch.cuda.memory._dump_snapshot(f"memory_{tag}_backward.pickle")
+                torch.cuda.memory._record_memory_history(enabled=None)
             t2 = timeit.default_timer()
+            if args.memory:
+                torch.cuda.memory._record_memory_history(max_entries=1000000)
             with nvtx.range("optimizer"):
                 optimizer.step()
             if device.type == "cuda":
                 torch.cuda.synchronize()
+            if args.memory:
+                torch.cuda.memory._dump_snapshot(f"memory_{tag}_optimizer.pickle")
+                torch.cuda.memory._record_memory_history(enabled=None)
             t3 = timeit.default_timer()
             fwd_times.append(t1 - t0)
             bwd_times.append(t2 - t1)
             opt_times.append(t3 - t2)
+
 
 def stats(times):
     avg = sum(times) / len(times)
