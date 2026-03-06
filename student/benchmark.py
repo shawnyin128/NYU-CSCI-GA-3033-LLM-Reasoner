@@ -64,22 +64,42 @@ for _ in range(args.warmup_steps):
         torch.cuda.synchronize()
 
 # timing
-times = []
+fwd_times = []
+bwd_times = []
 for _ in range(args.num_steps):
-    t0 = timeit.default_timer()
     if args.pass_type == "forward":
+        t0 = timeit.default_timer()
         with torch.no_grad():
             model(x)
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        fwd_times.append(timeit.default_timer() - t0)
     else:
         model.zero_grad()
+        t0 = timeit.default_timer()
         logits = model(x)
         loss = a1utils.cross_entropy(logits, y)
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        t1 = timeit.default_timer()
         loss.backward()
-    if device.type == "cuda":
-        torch.cuda.synchronize()
-    t1 = timeit.default_timer()
-    times.append(t1 - t0)
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        t2 = timeit.default_timer()
+        fwd_times.append(t1 - t0)
+        bwd_times.append(t2 - t1)
 
-avg = sum(times) / len(times)
-std = (sum((t - avg) ** 2 for t in times) / len(times)) ** 0.5
-print(f"[{args.model_size or 'custom'}] {args.pass_type} | avg: {avg * 1000:.2f} ms, std: {std * 1000:.2f} ms")
+def stats(times):
+    avg = sum(times) / len(times)
+    std = (sum((t - avg) ** 2 for t in times) / len(times)) ** 0.5
+    return avg * 1000, std * 1000
+
+tag = args.model_size or "custom"
+if args.pass_type == "forward":
+    avg, std = stats(fwd_times)
+    print(f"[{tag}] forward | avg: {avg:.2f} ms, std: {std:.2f} ms")
+else:
+    fa, fs = stats(fwd_times)
+    ba, bs = stats(bwd_times)
+    print(f"[{tag}] forward  | avg: {fa:.2f} ms, std: {fs:.2f} ms")
+    print(f"[{tag}] backward | avg: {ba:.2f} ms, std: {bs:.2f} ms")
