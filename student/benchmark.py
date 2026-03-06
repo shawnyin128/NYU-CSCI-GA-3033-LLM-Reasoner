@@ -5,7 +5,7 @@ import torch.cuda.nvtx as nvtx
 
 from torch import Tensor
 from einops import einsum
-from typing import Float, Bool
+from jaxtyping import Float, Bool, Int
 import a1_basics.model as a1model
 import a1_basics.nn_utils as a1utils, softmax
 
