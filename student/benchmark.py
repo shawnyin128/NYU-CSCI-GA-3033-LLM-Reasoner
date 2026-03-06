@@ -1,6 +1,7 @@
 import argparse
 import timeit
 import math
+from contextlib import nullcontext
 import torch
 import torch.cuda.nvtx as nvtx
 
@@ -62,6 +63,7 @@ parser.add_argument("--warmup-steps", type=int, default=5)
 parser.add_argument("--num-steps", type=int, default=10)
 parser.add_argument("--pass-type", choices=["forward", "forward_backward", "train"], default="forward_backward")
 parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
+parser.add_argument("--bf16", action="store_true", help="Use BF16 mixed precision for forward pass")
 args = parser.parse_args()
 
 if args.model_size is not None:
@@ -87,21 +89,25 @@ optimizer = None
 if args.pass_type == "train":
     optimizer = a1optim.AdamW(model.parameters(), lr=1e-4)
 
+autocast_ctx = torch.autocast(device.type, dtype=torch.bfloat16) if args.bf16 else nullcontext()
+
 # warmup
 for _ in range(args.warmup_steps):
     with nvtx.range("warmup"):
         if args.pass_type == "forward":
-            with torch.no_grad():
+            with torch.no_grad(), autocast_ctx:
                 model(x)
         elif args.pass_type == "forward_backward":
             model.zero_grad()
-            logits = model(x)
-            loss = a1utils.cross_entropy(logits, y)
+            with autocast_ctx:
+                logits = model(x)
+                loss = a1utils.cross_entropy(logits, y)
             loss.backward()
         else:
             optimizer.zero_grad()
-            logits = model(x)
-            loss = a1utils.cross_entropy(logits, y)
+            with autocast_ctx:
+                logits = model(x)
+                loss = a1utils.cross_entropy(logits, y)
             loss.backward()
             optimizer.step()
         if device.type == "cuda":
@@ -115,7 +121,7 @@ for _ in range(args.num_steps):
     with nvtx.range("step"):
         if args.pass_type == "forward":
             t0 = timeit.default_timer()
-            with torch.no_grad():
+            with torch.no_grad(), autocast_ctx:
                 model(x)
             if device.type == "cuda":
                 torch.cuda.synchronize()
@@ -123,7 +129,7 @@ for _ in range(args.num_steps):
         elif args.pass_type == "forward_backward":
             model.zero_grad()
             t0 = timeit.default_timer()
-            with nvtx.range("forward"):
+            with nvtx.range("forward"), autocast_ctx:
                 logits = model(x)
                 loss = a1utils.cross_entropy(logits, y)
             if device.type == "cuda":
@@ -139,7 +145,7 @@ for _ in range(args.num_steps):
         else:
             optimizer.zero_grad()
             t0 = timeit.default_timer()
-            with nvtx.range("forward"):
+            with nvtx.range("forward"), autocast_ctx:
                 logits = model(x)
                 loss = a1utils.cross_entropy(logits, y)
             if device.type == "cuda":
@@ -164,7 +170,7 @@ def stats(times):
     std = (sum((t - avg) ** 2 for t in times) / len(times)) ** 0.5
     return avg * 1000, std * 1000
 
-tag = args.model_size or "custom"
+tag = f"{args.model_size or 'custom'}{'|bf16' if args.bf16 else ''}"
 if args.pass_type == "forward":
     avg, std = stats(fwd_times)
     print(f"[{tag}] forward   | avg: {avg:.2f} ms, std: {std:.2f} ms")
