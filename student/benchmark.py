@@ -1,5 +1,6 @@
 import argparse
 import timeit
+import math
 import torch
 import torch.cuda.nvtx as nvtx
 
@@ -35,7 +36,7 @@ def annotated_scaled_dot_product_attention(
     return output
 
 
-a1_basics.model.scaled_dot_product_attention = annotated_scaled_dot_product_attention
+a1model.scaled_dot_product_attention = annotated_scaled_dot_product_attention
 
 
 MODEL_PRESETS = {
