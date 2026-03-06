@@ -115,19 +115,27 @@ for _ in range(args.warmup_steps):
             torch.cuda.synchronize()
 
 # timing
+tag = f"{args.model_size or 'custom'}_ctx{args.context_length}"
 fwd_times = []
 bwd_times = []
 opt_times = []
 for _ in range(args.num_steps):
     with nvtx.range("step"):
         if args.pass_type == "forward":
+            if args.memory:
+                torch.cuda.memory._record_memory_history(max_entries=1000000)
             t0 = timeit.default_timer()
             with torch.no_grad(), autocast_ctx:
                 model(x)
             if device.type == "cuda":
                 torch.cuda.synchronize()
             fwd_times.append(timeit.default_timer() - t0)
+            if args.memory:
+                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_forward.pickle")
+                torch.cuda.memory._record_memory_history(enabled=None)
         elif args.pass_type == "forward_backward":
+            if args.memory:
+                torch.cuda.memory._record_memory_history(max_entries=1000000)
             model.zero_grad()
             t0 = timeit.default_timer()
             with nvtx.range("forward"), autocast_ctx:
@@ -143,44 +151,36 @@ for _ in range(args.num_steps):
             t2 = timeit.default_timer()
             fwd_times.append(t1 - t0)
             bwd_times.append(t2 - t1)
+            if args.memory:
+                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_forward_backward.pickle")
+                torch.cuda.memory._record_memory_history(enabled=None)
         else:
-            tag = f"{args.model_size or 'custom'}_ctx{args.context_length}"
-            optimizer.zero_grad()
-            t0 = timeit.default_timer()
             if args.memory:
                 torch.cuda.memory._record_memory_history(max_entries=1000000)
+            optimizer.zero_grad()
+            t0 = timeit.default_timer()
             with nvtx.range("forward"), autocast_ctx:
                 logits = model(x)
                 loss = a1utils.cross_entropy(logits, y)
             if device.type == "cuda":
                 torch.cuda.synchronize()
-            if args.memory:
-                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_forward.pickle")
-                torch.cuda.memory._record_memory_history(enabled=None)
             t1 = timeit.default_timer()
-            if args.memory:
-                torch.cuda.memory._record_memory_history(max_entries=1000000)
             with nvtx.range("backward"):
                 loss.backward()
             if device.type == "cuda":
                 torch.cuda.synchronize()
-            if args.memory:
-                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_backward.pickle")
-                torch.cuda.memory._record_memory_history(enabled=None)
             t2 = timeit.default_timer()
-            if args.memory:
-                torch.cuda.memory._record_memory_history(max_entries=1000000)
             with nvtx.range("optimizer"):
                 optimizer.step()
             if device.type == "cuda":
                 torch.cuda.synchronize()
-            if args.memory:
-                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_optimizer.pickle")
-                torch.cuda.memory._record_memory_history(enabled=None)
             t3 = timeit.default_timer()
             fwd_times.append(t1 - t0)
             bwd_times.append(t2 - t1)
             opt_times.append(t3 - t2)
+            if args.memory:
+                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_train.pickle")
+                torch.cuda.memory._record_memory_history(enabled=None)
 
 
 def stats(times):
