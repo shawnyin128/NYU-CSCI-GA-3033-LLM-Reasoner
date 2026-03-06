@@ -6,6 +6,7 @@ import torch.cuda.nvtx as nvtx
 
 import a1_basics.model as a1model
 import a1_basics.nn_utils as a1utils
+import a1_basics.optimizer as a1optim
 
 from torch import Tensor
 from einops import einsum
@@ -59,7 +60,7 @@ parser.add_argument("--rope-theta", type=float, default=10000.0)
 parser.add_argument("--batch-size", type=int, default=4)
 parser.add_argument("--warmup-steps", type=int, default=5)
 parser.add_argument("--num-steps", type=int, default=10)
-parser.add_argument("--pass-type", choices=["forward", "forward_backward"], default="forward_backward")
+parser.add_argument("--pass-type", choices=["forward", "forward_backward", "train"], default="forward_backward")
 parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
 args = parser.parse_args()
 
@@ -82,23 +83,34 @@ model = a1model.BasicsTransformerLM(
 x = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=device)
 y = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=device)
 
+optimizer = None
+if args.pass_type == "train":
+    optimizer = a1optim.AdamW(model.parameters(), lr=1e-4)
+
 # warmup
 for _ in range(args.warmup_steps):
     with nvtx.range("warmup"):
         if args.pass_type == "forward":
             with torch.no_grad():
                 model(x)
-        else:
+        elif args.pass_type == "forward_backward":
             model.zero_grad()
             logits = model(x)
             loss = a1utils.cross_entropy(logits, y)
             loss.backward()
+        else:
+            optimizer.zero_grad()
+            logits = model(x)
+            loss = a1utils.cross_entropy(logits, y)
+            loss.backward()
+            optimizer.step()
         if device.type == "cuda":
             torch.cuda.synchronize()
 
 # timing
 fwd_times = []
 bwd_times = []
+opt_times = []
 for _ in range(args.num_steps):
     with nvtx.range("step"):
         if args.pass_type == "forward":
@@ -108,7 +120,7 @@ for _ in range(args.num_steps):
             if device.type == "cuda":
                 torch.cuda.synchronize()
             fwd_times.append(timeit.default_timer() - t0)
-        else:
+        elif args.pass_type == "forward_backward":
             model.zero_grad()
             t0 = timeit.default_timer()
             with nvtx.range("forward"):
@@ -124,6 +136,28 @@ for _ in range(args.num_steps):
             t2 = timeit.default_timer()
             fwd_times.append(t1 - t0)
             bwd_times.append(t2 - t1)
+        else:
+            optimizer.zero_grad()
+            t0 = timeit.default_timer()
+            with nvtx.range("forward"):
+                logits = model(x)
+                loss = a1utils.cross_entropy(logits, y)
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            t1 = timeit.default_timer()
+            with nvtx.range("backward"):
+                loss.backward()
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            t2 = timeit.default_timer()
+            with nvtx.range("optimizer"):
+                optimizer.step()
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            t3 = timeit.default_timer()
+            fwd_times.append(t1 - t0)
+            bwd_times.append(t2 - t1)
+            opt_times.append(t3 - t2)
 
 def stats(times):
     avg = sum(times) / len(times)
@@ -133,9 +167,16 @@ def stats(times):
 tag = args.model_size or "custom"
 if args.pass_type == "forward":
     avg, std = stats(fwd_times)
-    print(f"[{tag}] forward | avg: {avg:.2f} ms, std: {std:.2f} ms")
+    print(f"[{tag}] forward   | avg: {avg:.2f} ms, std: {std:.2f} ms")
+elif args.pass_type == "forward_backward":
+    fa, fs = stats(fwd_times)
+    ba, bs = stats(bwd_times)
+    print(f"[{tag}] forward   | avg: {fa:.2f} ms, std: {fs:.2f} ms")
+    print(f"[{tag}] backward  | avg: {ba:.2f} ms, std: {bs:.2f} ms")
 else:
     fa, fs = stats(fwd_times)
     ba, bs = stats(bwd_times)
-    print(f"[{tag}] forward  | avg: {fa:.2f} ms, std: {fs:.2f} ms")
-    print(f"[{tag}] backward | avg: {ba:.2f} ms, std: {bs:.2f} ms")
+    oa, os_ = stats(opt_times)
+    print(f"[{tag}] forward   | avg: {fa:.2f} ms, std: {fs:.2f} ms")
+    print(f"[{tag}] backward  | avg: {ba:.2f} ms, std: {bs:.2f} ms")
+    print(f"[{tag}] optimizer | avg: {oa:.2f} ms, std: {os_:.2f} ms")
