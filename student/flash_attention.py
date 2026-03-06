@@ -4,7 +4,6 @@ import triton
 import triton.language as tl
 
 
-@torch.compile
 def flash_attention_backward(Q, K, V, O, dO, L, is_causal=False):
     B, N, d = Q.shape
     scale = 1.0 / math.sqrt(d)
