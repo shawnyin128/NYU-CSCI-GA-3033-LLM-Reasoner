@@ -155,7 +155,7 @@ for _ in range(args.num_steps):
             if device.type == "cuda":
                 torch.cuda.synchronize()
             if args.memory:
-                torch.cuda.memory._dump_snapshot(f"memory_{tag}_forward.pickle")
+                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_forward.pickle")
                 torch.cuda.memory._record_memory_history(enabled=None)
             t1 = timeit.default_timer()
             if args.memory:
@@ -165,7 +165,7 @@ for _ in range(args.num_steps):
             if device.type == "cuda":
                 torch.cuda.synchronize()
             if args.memory:
-                torch.cuda.memory._dump_snapshot(f"memory_{tag}_backward.pickle")
+                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_backward.pickle")
                 torch.cuda.memory._record_memory_history(enabled=None)
             t2 = timeit.default_timer()
             if args.memory:
@@ -175,7 +175,7 @@ for _ in range(args.num_steps):
             if device.type == "cuda":
                 torch.cuda.synchronize()
             if args.memory:
-                torch.cuda.memory._dump_snapshot(f"memory_{tag}_optimizer.pickle")
+                torch.cuda.memory._dump_snapshot(f"./memory_{tag}_optimizer.pickle")
                 torch.cuda.memory._record_memory_history(enabled=None)
             t3 = timeit.default_timer()
             fwd_times.append(t1 - t0)
