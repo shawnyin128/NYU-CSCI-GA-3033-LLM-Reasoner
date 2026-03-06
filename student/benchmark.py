@@ -111,12 +111,14 @@ for _ in range(args.num_steps):
         else:
             model.zero_grad()
             t0 = timeit.default_timer()
-            logits = model(x)
-            loss = a1utils.cross_entropy(logits, y)
+            with nvtx.range("forward"):
+                logits = model(x)
+                loss = a1utils.cross_entropy(logits, y)
             if device.type == "cuda":
                 torch.cuda.synchronize()
             t1 = timeit.default_timer()
-            loss.backward()
+            with nvtx.range("backward"):
+                loss.backward()
             if device.type == "cuda":
                 torch.cuda.synchronize()
             t2 = timeit.default_timer()
